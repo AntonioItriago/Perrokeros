@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Menú Perrokeros - Pedido por WhatsApp</title>
     <style>
-        /* Estilos generales */
+        /* Estilos CSS - Se mantienen los estilos anteriores */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f8f8f8; color: #333; }
         .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         
@@ -24,7 +24,7 @@
         .producto-precio { font-weight: bold; color: #FBC02D; margin-left: 15px; width: 60px; text-align: right; font-size: 1.1em; }
         .controls { display: flex; align-items: center; gap: 5px; }
         .controls button { 
-            background-color: #558B2F; /* Verde principal */
+            background-color: #558B2F; 
             color: white; border: none; padding: 5px 10px; 
             cursor: pointer; border-radius: 4px; transition: background-color 0.3s; 
         }
@@ -33,20 +33,26 @@
         
         /* Estilos del Total y Botón */
         .total-container { 
-            margin-top: 25px; padding: 15px; background-color: #E8F5E9; /* Verde muy claro */
+            margin-top: 25px; padding: 15px; background-color: #E8F5E9; 
             border: 1px solid #C8E6C9; border-radius: 4px; 
-            display: flex; justify-content: space-between; align-items: center; 
+            display: flex; flex-direction: column; /* Cambiado a columna para dos totales */
+            align-items: flex-start;
         }
-        .total-container span { font-size: 1.4em; color: #33691E; font-weight: bold; }
+        .total-item { 
+            width: 100%; display: flex; justify-content: space-between; margin-bottom: 5px;
+        }
+        .total-item span { font-size: 1.4em; color: #33691E; font-weight: bold; }
+        .bs-rate { font-size: 0.8em; color: #888; margin-top: 5px; } /* Estilo para la tasa BCV */
+
         .btn-ordenar { 
-            background-color: #25D366; /* Verde WhatsApp */
+            background-color: #25D366; 
             color: white; border: none; padding: 12px 20px; font-size: 1.1em; 
             border-radius: 6px; cursor: pointer; margin-top: 15px; width: 100%; 
             transition: background-color 0.3s; font-weight: bold;
         }
         .btn-ordenar:hover { background-color: #1EBE4A; }
 
-        /* Estilos de Modal */
+        /* Estilos de Modal (ajustados para doble total) */
         .modal {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); 
             display: none; justify-content: center; align-items: center; z-index: 100;
@@ -59,6 +65,8 @@
         .modal-content ul { list-style: none; padding: 0; text-align: left; margin-bottom: 20px; }
         .modal-content ul li { padding: 8px 0; border-bottom: 1px dotted #ddd; display: flex; justify-content: space-between; }
         .modal-content .total { font-size: 1.2em; font-weight: bold; color: #33691E; margin-top: 10px; }
+        .modal-content .bs-total { font-size: 1em; color: #555; margin-top: 5px; } /* Total en Bs en el modal */
+
         .modal-content .btn-whatsapp { background-color: #25D366; }
         .modal-content .btn-whatsapp:hover { background-color: #1EBE4A; }
 
@@ -80,8 +88,19 @@
         </div>
         
         <div class="total-container">
-            <div>Total estimado del pedido:</div>
-            <span><span id="total-currency-code">$</span><span id="total">0.00</span></span>
+            <div class="total-item">
+                <div>Total estimado del pedido:</div>
+                <span><span id="total-currency-code">$</span><span id="total-usd">0.00</span></span>
+            </div>
+            
+            <div class="total-item">
+                <div>Total en Bolívares (Bs.):</div>
+                <span>Bs. <span id="total-bs">0.00</span></span>
+            </div>
+
+            <div class="bs-rate">
+                *Tasa BCV: 1 USD = Bs. <span id="bcv-rate-display"></span>
+            </div>
         </div>
 
         <button class="btn-ordenar" onclick="mostrarResumen()">Generar Orden por WhatsApp</button>
@@ -91,7 +110,8 @@
         <div class="modal-content">
             <h3>📝 Resumen de tu Pedido</h3>
             <ul id="resumen-lista"></ul>
-            <p class="total">Total: <span id="resumen-total-currency-code">$</span><span id="resumen-total">0.00</span></p>
+            <p class="total">Total USD: <span id="resumen-total-currency-code">$</span><span id="resumen-total-usd">0.00</span></p>
+            <p class="bs-total">Total Bs.: Bs. <span id="resumen-total-bs">0.00</span></p>
             <button class="btn-ordenar btn-whatsapp" onclick="enviarPedidoWhatsApp()">📞 Ordenar por WhatsApp</button>
             <button class="btn-ordenar" style="background-color: #777;" onclick="cerrarResumen()">Volver al Menú</button>
         </div>
@@ -107,36 +127,31 @@
 
     <script>
         // *** CONFIGURACIÓN CLAVE ***
-        // Reemplaza con tu número de WhatsApp
         const NUMERO_WHATSAPP = '584122525407'; 
-
-        // URL del Google Sheets publicado en formato TSV (separado por tabuladores)
         const TSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRA3DaYat0bjeFAaBSCJqykmEyGxFF1lgCLVfBLpbH6GU_m70co9bwgDrn34d4DoTnz3TkQm7LNvlWy/pub?gid=1090552327&single=true&output=tsv'; 
+        
+        // TASA OFICIAL BCV (27/11/2025 - Venta)
+        const BCV_RATE = 244.6504; // Tasa Bs por 1 USD
         // --------------------------------------------------------------------
 
         let productosDB = {}; 
         const carrito = {};
-        let currencyCode = '$'; // Símbolo de moneda por defecto
+        let currencyCode = '$'; 
 
-        // --- FUNCIONES CENTRALES DE CARGA Y PROCESAMIENTO (ADAPTADAS A TSV) ---
+        // Función para mostrar la tasa BCV al cargar
+        document.getElementById('bcv-rate-display').textContent = BCV_RATE.toFixed(4);
+
+        // --- FUNCIONES CENTRALES DE CARGA Y PROCESAMIENTO ---
 
         async function cargarMenu() {
             document.getElementById('menu-secciones').innerHTML = '<p>Intentando cargar menú de Perrokeros...</p>';
             try {
-                // 1. Descarga el archivo TSV
                 const response = await fetch(TSV_URL);
                 if (!response.ok) {
                     throw new Error(`Error HTTP: ${response.status}. ¿Está bien publicada la URL?`);
                 }
                 const tsvText = await response.text();
-                
-                console.log("--- DEBUG: TSV TEXTO COMPLETO ---");
-                // console.log(tsvText); // Descomentar para ver el texto crudo en consola
-                
-                // 2. Procesa el texto TSV
                 productosDB = parsearTSV(tsvText);
-
-                // 3. Renderiza y calcula
                 renderizarMenu();
                 actualizarTotal();
             } catch (error) {
@@ -149,44 +164,28 @@
             const data = {};
             const lineas = tsv.replace(/\r/g, '').split('\n');
             
-            console.log("DEBUG: Número total de líneas (incluyendo encabezados):", lineas.length);
-
-            // Omitimos la primera línea (encabezados)
             for (let i = 1; i < lineas.length; i++) {
                 const linea = lineas[i].trim();
                 if (linea.length === 0) continue; 
 
-                // *** CAMBIO CLAVE: Usar '\t' (tabulador) como separador ***
                 const columnas = linea.split('\t'); 
                 
-                // El nuevo orden de columnas: id, name, price, currency, description, category, image_url, is_active, created_at
-                if (columnas.length < 6) { // Mínimo para ID, Nombre, Precio, Moneda, Descripción y Categoría
-                    // console.error("DEBUG: Línea ignorada (menos de 6 columnas esperadas):", linea); // Descomentar para debug
-                    continue; 
-                }
+                if (columnas.length < 6) continue; 
 
                 try {
-                    // Mapeo de las columnas TSV
                     const [id, nombre, precioStr, currency, desc, categoria] = columnas.slice(0, 6).map(c => c.trim().replace(/"/g, ''));
                     
-                    if (!id || !precioStr || !categoria) {
-                        console.error("DEBUG: Fila con campos vacíos esenciales (ID, PRECIO o CATEGORÍA):", linea);
-                        continue;
-                    }
+                    if (!id || !precioStr || !categoria) continue;
                     
                     const precio = parseFloat(precioStr);
-                    if (isNaN(precio)) {
-                        console.error("DEBUG: FALLO: El PRECIO no es un número. Precio recibido:", precioStr, "en línea:", linea);
-                        continue;
-                    }
+                    if (isNaN(precio)) continue;
 
                     if (currency) {
-                        currencyCode = currency; // Se usa el código de la primera fila válida para todo el menú
+                        currencyCode = currency; 
                     }
 
                     const producto = { id, nombre, precio, desc, categoria, currency: currencyCode };
 
-                    // Agrupa por Categoría
                     if (!data[categoria]) {
                         data[categoria] = [];
                     }
@@ -196,26 +195,22 @@
                     console.error("DEBUG: Error inesperado al procesar línea:", linea, e);
                 }
             }
-            console.log("DEBUG: Datos procesados (productosDB):", data);
             return data;
         }
 
-
-        // --- FUNCIONES DE RENDERIZADO Y LÓGICA (RESTO DEL CÓDIGO) ---
+        // --- FUNCIONES DE RENDERIZADO Y LÓGICA ---
 
         function renderizarMenu() {
             const menuDiv = document.getElementById('menu-secciones');
             let html = '';
             
-            // Actualiza el símbolo de moneda en la interfaz
             document.getElementById('total-currency-code').textContent = currencyCode;
             document.getElementById('resumen-total-currency-code').textContent = currencyCode;
 
-            // Itera sobre las categorías obtenidas
             for (const seccion in productosDB) {
                 html += `<h2>${seccion}</h2><div class="menu-section">`;
                 productosDB[seccion].forEach(p => {
-                    carrito[p.id] = 0; // Inicializa el carrito
+                    carrito[p.id] = 0; 
                     html += `<div class="producto">
                                 <div class="producto-info">
                                     <h4>${p.nombre}</h4>
@@ -255,9 +250,7 @@
 
         function obtenerItemsPedidos() {
             const itemsPedidos = [];
-            // Itera sobre todas las categorías
             for (const seccion in productosDB) {
-                // Itera sobre los productos en cada categoría
                 productosDB[seccion].forEach(p => {
                     const cantidad = carrito[p.id];
                     if (cantidad > 0) {
@@ -267,7 +260,7 @@
                             nombre: p.nombre, 
                             cantidad: cantidad, 
                             subtotal: subtotal,
-                            currency: p.currency // Agrega la moneda
+                            currency: p.currency
                         });
                     }
                 });
@@ -275,10 +268,19 @@
             return itemsPedidos;
         }
 
+        // --- FUNCIÓN CLAVE ACTUALIZADA: CALCULA AMBOS TOTALES ---
         function actualizarTotal() {
-            let totalGeneral = 0;
-            obtenerItemsPedidos().forEach(item => { totalGeneral += item.subtotal; });
-            document.getElementById('total').textContent = totalGeneral.toFixed(2);
+            let totalGeneralUSD = 0;
+            obtenerItemsPedidos().forEach(item => { totalGeneralUSD += item.subtotal; });
+            
+            // Cálculo en Bolívares
+            const totalGeneralBS = totalGeneralUSD * BCV_RATE;
+
+            // Actualiza la interfaz USD
+            document.getElementById('total-usd').textContent = totalGeneralUSD.toFixed(2);
+            
+            // Actualiza la interfaz BS (dos decimales)
+            document.getElementById('total-bs').textContent = totalGeneralBS.toFixed(2);
         }
 
         // --- Funciones de Modal y WhatsApp ---
@@ -292,12 +294,17 @@
                 return;
             }
 
-            // Mapea la lista de elementos para el modal de resumen
             document.getElementById('resumen-lista').innerHTML = itemsPedidos.map(item => 
                 `<li>**${item.cantidad}x** ${item.nombre} <span style="float:right; font-weight: bold;">${item.currency}${item.subtotal.toFixed(2)}</span></li>`
             ).join('');
 
-            document.getElementById('resumen-total').textContent = document.getElementById('total').textContent;
+            // Pasa ambos totales al modal
+            const totalUSD = document.getElementById('total-usd').textContent;
+            const totalBS = document.getElementById('total-bs').textContent;
+
+            document.getElementById('resumen-total-usd').textContent = totalUSD;
+            document.getElementById('resumen-total-bs').textContent = totalBS;
+            
             modal.style.display = 'flex';
         }
 
@@ -309,19 +316,23 @@
             document.getElementById('confirmacion-modal').style.display = 'none';
         }
 
+        // --- FUNCIÓN CLAVE ACTUALIZADA: AGREGA EL TOTAL EN BOLÍVARES AL MENSAJE ---
         function enviarPedidoWhatsApp() {
             const items = obtenerItemsPedidos();
-            const total = document.getElementById('total').textContent;
+            const totalUSD = document.getElementById('total-usd').textContent;
+            const totalBS = document.getElementById('total-bs').textContent;
             const simboloMoneda = currencyCode;
 
             let mensaje = `🐾 ¡Hola, Perrokeros! Quiero realizar un pedido:\n\n`;
             items.forEach(item => { mensaje += `* ${item.cantidad}x ${item.nombre}\n`; });
             
-            mensaje += `\n*TOTAL ESTIMADO: ${simboloMoneda}${total}*`;
+            // Incluye ambos totales
+            mensaje += `\n*TOTAL ESTIMADO:*`;
+            mensaje += `\n* ${simboloMoneda}${totalUSD}`;
+            mensaje += `\n* Bs. ${totalBS} (Tasa BCV: 1${simboloMoneda} = Bs. ${BCV_RATE.toFixed(4)})`;
             mensaje += '\n\nPor favor, necesito confirmar el pedido y los detalles de pago. ¡Gracias! 🦴';
 
             const mensajeCodificado = encodeURIComponent(mensaje);
-            // Crea el enlace de WhatsApp
             const urlWhatsApp = `https://wa.me/${NUMERO_WHATSAPP}?text=${mensajeCodificado}`;
             
             window.open(urlWhatsApp, '_blank');
@@ -329,7 +340,6 @@
             document.getElementById('confirmacion-modal').style.display = 'flex';
         }
 
-        // El script se inicia llamando a la función de carga
         window.onload = cargarMenu; 
 
     </script>
